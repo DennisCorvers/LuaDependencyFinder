@@ -1,4 +1,6 @@
-﻿using LuaDependencyFinder.Models;
+﻿using LuaDependencyFinder.Config;
+using LuaDependencyFinder.Logging;
+using LuaDependencyFinder.Models;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -11,21 +13,42 @@ namespace LuaDependencyFinder.WikiAPI
 {
     public class MWService
     {
-        private readonly string m_domain;
+        private readonly WikiConfig m_config;
+        private readonly HttpClient m_httpClient;
+        private readonly ILogger m_logger;
 
-        public MWService(string domain)
+        public MWService(WikiConfig config, ILogger logger)
         {
-            m_domain = domain.TrimEnd('/');
+            m_config = config;
+            m_httpClient = new HttpClient();
+            m_logger = logger;
         }
 
-        public void DownloadDependency()
+        public async Task<IEnumerable<WikiPage>> DownloadDependencies(IEnumerable<string> pages)
         {
+            var worker = new DepWorker(m_config, m_logger);
+            var workerTasks = pages.Select(async page =>
+            {
+                try
+                {
+                    return await worker.DownloadDependency(page);
+                }
+                catch (Exception e)
+                {
+                    m_logger.Log($"Unable to download page: {e.Message}.");
+                    return default;
+                }
+            });
 
+            var results = await Task.WhenAll(workerTasks);
+            return results.Where(x => x != null)!;
         }
 
-        public async Task<IEnumerable<PageInfo>> GetRevisionHistory(IEnumerable<string> pages)
+        public async Task<IEnumerable<PageRevision>> GetRevisionHistory(IEnumerable<string> pages)
         {
-            var controller = new MWController(new HttpClient(), m_domain);
+            m_logger.Log($"Getting revision history for pages: {string.Join('|', pages)}");
+
+            var controller = new MWController(m_httpClient, m_config);
             var result = await controller.GetRevisionHistory(pages);
 
             if (result == null || result.Query == null)
@@ -38,11 +61,11 @@ namespace LuaDependencyFinder.WikiAPI
                 .Select(x => Map(x.Value))
                 .ToImmutableList();
 
-            static PageInfo Map(Page page)
+            static PageRevision Map(Page page)
             {
                 var latestRevision = page.Revisions?.FirstOrDefault()?.Timestamp;
 
-                return new PageInfo(
+                return new PageRevision(
                     page.PageId,
                     page.Namespace,
                     page.Title,

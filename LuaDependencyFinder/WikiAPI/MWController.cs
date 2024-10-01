@@ -1,4 +1,5 @@
-﻿using System;
+﻿using LuaDependencyFinder.Config;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -10,12 +11,14 @@ namespace LuaDependencyFinder.WikiAPI
     public class MWController
     {
         private readonly HttpClient m_httpClient;
-        private readonly string m_domain;
+        private readonly WikiConfig m_config;
+        private readonly Uri m_apiUri;
 
-        public MWController(HttpClient httpClient, string domain)
+        public MWController(HttpClient httpClient, WikiConfig config)
         {
             m_httpClient = httpClient;
-            m_domain = domain;
+            m_config = config;
+            m_apiUri = new Uri(new Uri(config.WikiDomain), config.ApiPath);
         }
 
         public async Task<MediaWikiResponse?> GetRevisionHistory(IEnumerable<string> pages)
@@ -26,8 +29,10 @@ namespace LuaDependencyFinder.WikiAPI
                 throw new Exception("Too many pages at once");
             }
             var pageQuery = string.Join("|", pages);
-            var url = $"{m_domain}/api.php?action=query&prop=revisions&titles={pageQuery}&rvlimit=1&rvprop=timestamp&format=json";
-            
+            var url = new UriBuilder(m_apiUri)
+            {
+                Query = $"?action=query&prop=revisions&titles={pageQuery}&rvprop=timestamp&format=json",
+            }.Uri;
 
             var response = await m_httpClient.GetAsync(url);
             if (!response.IsSuccessStatusCode)
