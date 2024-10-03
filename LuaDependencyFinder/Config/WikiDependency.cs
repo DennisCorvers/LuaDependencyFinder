@@ -10,11 +10,14 @@ namespace LuaDependencyFinder.Config
 
         public string Path { get; }
 
-        public WikiDependency(string wikiPage, DateTime timestamp, string path)
+        public bool Tracking { get; }
+
+        public WikiDependency(string wikiPage, DateTime timestamp, string path, bool tracking = true)
         {
             WikiPage = wikiPage;
             Timestamp = timestamp;
             Path = path;
+            Tracking = tracking;
         }
     }
 }

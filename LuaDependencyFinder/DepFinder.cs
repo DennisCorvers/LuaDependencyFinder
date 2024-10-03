@@ -55,28 +55,51 @@ namespace LuaDependencyFinder
             var revisionHistory = await m_mwService.GetRevisionHistory(pages);
 
             // Find outdated pages
-            var existingPages = revisionHistory.Where(x => x.PageId > 0);
+            var patchablePages = revisionHistory
+                .Where(IsPatchablePage)
+                .ToArray();
 
-            var outdatedPages = existingPages
-                .Where(page =>
-                    !m_config.Dependencies.TryGetValue(page.Title, out var dependency) ||
-                    dependency.Timestamp < page.LatestRevision)
-                .ToList();
+            m_logger.Log($"{patchablePages.Length} outdated or unlisted pages found.");
 
-            m_logger.Log($"{outdatedPages.Count} outdated or unlisted pages found.");
-
-            var wikiPages = await m_mwService.DownloadDependencies(outdatedPages.Select(x => x.Title));
+            var wikiPages = await m_mwService.DownloadDependencies(patchablePages.Select(x => x.Title));
             await SyncFiles(wikiPages);
         }
 
-        public void AnalyseFiles(IEnumerable<LuaFileInfo> files)
+        public async Task DownloadDependencies()
         {
+            var analyser = new LuaAnalyser();
             var set = new HashSet<string>();
 
-            foreach (var file in files)
+            foreach (var file in m_localFiles.Values)
             {
-
+                var analyserInfo = await analyser.AnalyseLuaFile(file);
+                if (analyserInfo.Any(x => x.ContainsModulePrefix))
+                {
+                    await FixModuleName(file, analyserInfo);
+                }
             }
+        }
+
+        private bool IsPatchablePage(PageRevision page)
+        {
+            // Page needs to exist on the Wiki.
+            if (page.PageId == 0)
+                return false;
+
+            // Page is unknown. (Syncable)
+            if (!m_config.Dependencies.TryGetValue(page.Title, out var dependency))
+                return true;
+
+            // Only include pages marked as trackable. (Outdated page)
+            if (dependency.Tracking)
+                return dependency.Timestamp < page.LatestRevision;
+
+            return false;
+        }
+
+        private async Task FixModuleName(LuaFileInfo fileInfo,)
+        {
+
         }
 
         private async Task SyncFiles(IEnumerable<WikiPage> pages)

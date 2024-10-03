@@ -9,6 +9,7 @@ namespace LuaDependencyFinder
     {
         static async Task Main(string[] args)
         {
+
             await Run();
 
             Console.WriteLine();
@@ -40,8 +41,7 @@ namespace LuaDependencyFinder
             }
 
             var finder = new DepFinder(config!, logger);
-            await finder.PatchFiles();
-            //await finder.SyncFiles();
+            await finder.DownloadDependencies();    
         }
     }
 }

@@ -1,13 +1,7 @@
 ﻿using LuaDependencyFinder.Config;
 using LuaDependencyFinder.Logging;
 using LuaDependencyFinder.Models;
-using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace LuaDependencyFinder.WikiAPI
 {
@@ -16,22 +10,23 @@ namespace LuaDependencyFinder.WikiAPI
         private readonly WikiConfig m_config;
         private readonly HttpClient m_httpClient;
         private readonly ILogger m_logger;
+        private readonly Uri m_articleUrl;
 
         public MWService(WikiConfig config, ILogger logger)
         {
             m_config = config;
             m_httpClient = new HttpClient();
             m_logger = logger;
+            m_articleUrl = new Uri(new Uri(m_config.WikiDomain), m_config.ArticlePathFixed);
         }
 
         public async Task<IEnumerable<WikiPage>> DownloadDependencies(IEnumerable<string> pages)
         {
-            var worker = new DepWorker(m_config, m_logger);
             var workerTasks = pages.Select(async page =>
             {
                 try
                 {
-                    return await worker.DownloadDependency(page);
+                    return await DownloadDependency(page);
                 }
                 catch (Exception e)
                 {
@@ -42,6 +37,19 @@ namespace LuaDependencyFinder.WikiAPI
 
             var results = await Task.WhenAll(workerTasks);
             return results.Where(x => x != null)!;
+        }
+
+        public async Task<WikiPage> DownloadDependency(string page)
+        {
+            var pageUrl = new UriBuilder(m_articleUrl + page)
+            {
+                Query = "?action=raw",
+            }.Uri;
+            m_logger.Log($"Downloading contents from {pageUrl}");
+
+            var contents = await m_httpClient.GetStringAsync(pageUrl);
+
+            return new WikiPage(page, DateTime.UtcNow, contents);
         }
 
         public async Task<IEnumerable<PageRevision>> GetRevisionHistory(IEnumerable<string> pages)

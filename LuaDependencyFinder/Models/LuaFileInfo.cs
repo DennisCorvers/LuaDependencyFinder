@@ -1,9 +1,4 @@
 ﻿using LuaDependencyFinder.WikiAPI;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace LuaDependencyFinder.Models
 {
@@ -23,5 +18,4 @@ namespace LuaDependencyFinder.Models
             ArticlePath = Mapping.PathToWikiPage(relativePath);
         }
     }
-
 }
