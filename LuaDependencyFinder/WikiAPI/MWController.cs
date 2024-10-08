@@ -1,27 +1,28 @@
 ﻿using LuaDependencyFinder.Config;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Text;
-using System.Threading.Tasks;
+using LuaDependencyFinder.Logging;
+using LuaDependencyFinder.Models;
+using LuaDependencyFinder.WikiAPI.Models;
 
 namespace LuaDependencyFinder.WikiAPI
 {
     public class MWController
     {
         private readonly HttpClient m_httpClient;
-        private readonly WikiConfig m_config;
+        private readonly IWikiConfig m_config;
         private readonly Uri m_apiUri;
+        private readonly Uri m_articleUrl;
+        private readonly ILogger m_logger;
 
-        public MWController(HttpClient httpClient, WikiConfig config)
+        public MWController(IWikiConfig config, ILogger logger)
         {
-            m_httpClient = httpClient;
+            m_logger = logger;
+            m_httpClient = new HttpClient();
             m_config = config;
             m_apiUri = new Uri(new Uri(config.WikiDomain), config.ApiPath);
+            m_articleUrl = new Uri(new Uri(m_config.WikiDomain), m_config.ArticlePathFixed);
         }
 
-        public async Task<MediaWikiResponse?> GetRevisionHistory(IEnumerable<string> pages)
+        public async Task<MediaWikiRevision?> GetRevisionHistory(IEnumerable<string> pages)
         {
             if (pages.Count() > 50)
             {
@@ -42,9 +43,29 @@ namespace LuaDependencyFinder.WikiAPI
             }
 
             var json = await response.Content.ReadAsStringAsync();
-            var result = System.Text.Json.JsonSerializer.Deserialize<MediaWikiResponse>(json);
+            var result = System.Text.Json.JsonSerializer.Deserialize<MediaWikiRevision>(json);
 
             return result;
+        }
+
+        public async Task<WikiPage?> DownloadDependency(string page)
+        {
+            var pageUrl = new UriBuilder(m_articleUrl + page)
+            {
+                Query = "?action=raw",
+            }.Uri;
+            m_logger.Log($"Downloading contents from {pageUrl}");
+
+            var response = await m_httpClient.GetAsync(pageUrl);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                m_logger.Log($"Page \"{pageUrl}\" does not exist.");
+                return null;
+            }
+
+            var contents = await response.Content.ReadAsStringAsync();
+
+            return new WikiPage(page, DateTime.UtcNow, contents);
         }
     }
 }

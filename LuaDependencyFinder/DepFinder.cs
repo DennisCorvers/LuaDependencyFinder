@@ -1,47 +1,27 @@
 ﻿using LuaDependencyFinder.Config;
 using LuaDependencyFinder.Logging;
 using LuaDependencyFinder.Models;
+using LuaDependencyFinder.Storage;
 using LuaDependencyFinder.WikiAPI;
-using System.Linq;
-using System.Security.Cryptography.X509Certificates;
+using System.Collections.Immutable;
 
 namespace LuaDependencyFinder
 {
     internal class DepFinder
     {
-        private readonly WikiConfig m_config;
-        private readonly MWService m_mwService;
+        private readonly IWikiConfig m_config;
+        private readonly IMWService m_mwService;
         private readonly ILogger m_logger;
-        private readonly string m_root = Directory.GetCurrentDirectory();
+        private readonly IFileRepository m_fileRepository;
+        private readonly ILuaAnalyser m_luaAnalyser;
 
-        private readonly Dictionary<string, LuaFileInfo> m_localFiles;
-
-        public DepFinder(WikiConfig config, ILogger logger)
+        public DepFinder(IWikiConfig config, ILogger logger)
         {
             m_config = config;
             m_mwService = new MWService(config, logger);
             m_logger = logger;
-            m_localFiles = GatherFiles();
-        }
-
-        private Dictionary<string, LuaFileInfo> GatherFiles()
-        {
-            // Finds all .lua and .json files in the (sub)directory.
-            var files = Directory.GetFiles(m_root, "*.lua", SearchOption.AllDirectories);
-
-            var metadata = new List<LuaFileInfo>();
-
-            foreach (var file in files)
-            {
-                var fileName = Path.GetFileName(file);
-                var path = Path.GetRelativePath(m_root, file);
-
-                metadata.Add(new LuaFileInfo(path, fileName));
-            }
-
-            return metadata.ToDictionary(
-                k => k.ArticlePath,
-                v => v);
+            m_fileRepository = new FileRepository(config, logger);
+            m_luaAnalyser = new LuaAnalyser();
         }
 
         /// <summary>
@@ -50,7 +30,7 @@ namespace LuaDependencyFinder
         public async Task PatchFiles()
         {
             m_logger.Log("Patching local files...");
-            var pages = m_localFiles.Values.Select(x => x.ArticlePath);
+            var pages = m_fileRepository.GetLocalDependencies().Select(x => x.WikiPage);
             // Check the wiki for revision history on all local files.
             var revisionHistory = await m_mwService.GetRevisionHistory(pages);
 
@@ -61,23 +41,67 @@ namespace LuaDependencyFinder
 
             m_logger.Log($"{patchablePages.Length} outdated or unlisted pages found.");
 
-            var wikiPages = await m_mwService.DownloadDependencies(patchablePages.Select(x => x.Title));
-            await SyncFiles(wikiPages);
+            // Download and store patchable pages.
+            if (patchablePages.Any())
+            {
+                var wikiPages = await m_mwService.GetDependencies(patchablePages.Select(x => x.Title));
+                wikiPages = wikiPages.Select(x => m_luaAnalyser.PatchDependency(x));
+
+                await m_fileRepository.StorePages(wikiPages);
+            }
         }
 
         public async Task DownloadDependencies()
         {
-            var analyser = new LuaAnalyser();
-            var set = new HashSet<string>();
+            var localFiles = m_fileRepository.GetLocalDependencies();
 
-            foreach (var file in m_localFiles.Values)
+            var collectedPages = new HashSet<string>(localFiles.Select(x => x.WikiPage));
+
+            // Read all local dependencies
+            var tasks = localFiles.Select(async file =>
             {
-                var analyserInfo = await analyser.AnalyseLuaFile(file);
-                if (analyserInfo.Any(x => x.ContainsModulePrefix))
+                using (var sr = new StreamReader(file.Path, System.Text.Encoding.UTF8))
                 {
-                    await FixModuleName(file, analyserInfo);
+                    var contents = await sr.ReadToEndAsync();
+                    sr.Close();
+
+                    return new WikiPage(file.WikiPage, default, contents);
                 }
+            });
+
+            var localWikiPages = await Task.WhenAll(tasks);
+
+            await DownloadAndStoreDependencies(localWikiPages, collectedPages);
+        }
+
+        private async Task DownloadAndStoreDependencies(IEnumerable<WikiPage> dependencies, ISet<string> pages)
+        {
+            var requiredDependencies = dependencies
+                .SelectMany(x => m_luaAnalyser.AnalyseLuaFile(x.Contents))
+                .DistinctBy(x => x.DependencyName)
+                .Where(x => !pages.Contains(x.ModuleName))
+                .Select(x => x.ModuleName)
+                .ToImmutableArray();
+
+            if (!requiredDependencies.Any())
+            {
+                m_logger.Log("No (more) dependencies found to download.");
+                return;
             }
+
+            var wikiDeps = await m_mwService.GetDependencies(requiredDependencies);
+            wikiDeps = wikiDeps.Select(x => m_luaAnalyser.PatchDependency(x));
+
+            await m_fileRepository.StorePages(wikiDeps);
+
+            // Add stored pages to avoid downloading them again.
+            foreach (var dep in requiredDependencies)
+            {
+                pages.Add(dep);
+            }
+
+            // Recursively analyse nested dependencies
+            await DownloadAndStoreDependencies(wikiDeps, pages);
         }
 
         private bool IsPatchablePage(PageRevision page)
@@ -87,7 +111,7 @@ namespace LuaDependencyFinder
                 return false;
 
             // Page is unknown. (Syncable)
-            if (!m_config.Dependencies.TryGetValue(page.Title, out var dependency))
+            if (!m_config.TryFind(page.Title, out var dependency))
                 return true;
 
             // Only include pages marked as trackable. (Outdated page)
@@ -95,62 +119,6 @@ namespace LuaDependencyFinder
                 return dependency.Timestamp < page.LatestRevision;
 
             return false;
-        }
-
-        private async Task FixModuleName(LuaFileInfo fileInfo,)
-        {
-
-        }
-
-        private async Task SyncFiles(IEnumerable<WikiPage> pages)
-        {
-            // Make sure directories exist first
-            CreateDirectories(pages);
-
-            // Store file(s) and update dependency information
-            var workers = pages.Select(async page =>
-            {
-                try
-                {
-                    var relativePath = Mapping.WikiPageToPath(page.Page);
-                    var outputPath = Path.Combine(m_root, relativePath);
-
-                    m_logger.Log($"Storing dependency \"{relativePath}\" to disk.");
-                    using (var streamWriter = new StreamWriter(outputPath, false))
-                        await streamWriter.WriteAsync(page.Contents);
-
-                    var wikiDep = new WikiDependency(page.Page, page.TimeStamp, relativePath);
-                    lock (m_config)
-                    {
-                        m_config.Dependencies[page.Page] = wikiDep;
-                    }
-                }
-                catch (Exception e)
-                {
-                    m_logger.Log($"Unable to save page: {e.Message}.");
-                }
-            });
-
-            await Task.WhenAll(workers);
-
-            if (pages.Any())
-            {
-                m_logger.Log("Updating dependency config.");
-                m_config.Save();
-            }
-        }
-
-        private void CreateDirectories(IEnumerable<WikiPage> pages)
-        {
-            foreach (var page in pages)
-            {
-                var outputPath = Path.Combine(m_root, Mapping.WikiPageToPath(page.Page));
-                var directoryPath = Path.GetDirectoryName(outputPath)!;
-                if (!Directory.Exists(directoryPath))
-                {
-                    Directory.CreateDirectory(directoryPath);
-                }
-            }
         }
     }
 }

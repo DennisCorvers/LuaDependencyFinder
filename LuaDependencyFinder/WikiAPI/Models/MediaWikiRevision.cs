@@ -6,9 +6,9 @@ using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
-namespace LuaDependencyFinder.WikiAPI
+namespace LuaDependencyFinder.WikiAPI.Models
 {
-    public class MediaWikiResponse
+    public class MediaWikiRevision
     {
         [JsonPropertyName("query")]
         public Query? Query { get; set; }

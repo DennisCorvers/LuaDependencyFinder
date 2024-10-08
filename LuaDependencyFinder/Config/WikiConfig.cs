@@ -1,16 +1,22 @@
-﻿using System.Text.Json;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using LuaDependencyFinder.Models;
 
 namespace LuaDependencyFinder.Config
 {
-    public record WikiConfig : IJsonOnSerializing
+    public record WikiConfig : IWikiConfig, IJsonOnSerializing
     {
         private static readonly JsonSerializerOptions JsonSerializerOptions = new JsonSerializerOptions()
         {
             WriteIndented = true,
+            PropertyNameCaseInsensitive = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         };
 
-        private const string FileName = "DepConfig.json";
+        private readonly Dictionary<string, WikiDependency> m_dependencies;
+
+        public const string FileName = "DepConfig.json";
 
         [JsonPropertyName("Dependencies")]
         [JsonPropertyOrder(3)]
@@ -20,10 +26,10 @@ namespace LuaDependencyFinder.Config
         public string WikiDomain { get; }
 
         [JsonPropertyOrder(1)]
-        public string ArticlePath { get; }
+        public string ArticlePath { get; set; }
 
         [JsonPropertyOrder(2)]
-        public string ApiPath { get; }
+        public string ApiPath { get; set; }
 
         [JsonIgnore]
         public string ArticlePathFixed
@@ -44,7 +50,16 @@ namespace LuaDependencyFinder.Config
         }
 
         [JsonIgnore]
-        public Dictionary<string, WikiDependency> Dependencies { get; private set; }
+        public IReadOnlyCollection<WikiDependency> WikiDependencies
+        {
+            get
+            {
+                lock (m_dependencies)
+                {
+                    return m_dependencies.Values;
+                }
+            }
+        }
 
         [JsonConstructor]
         public WikiConfig(string wikiDomain, string articlePath, string apiPath, WikiDependency[]? deps)
@@ -52,13 +67,13 @@ namespace LuaDependencyFinder.Config
             WikiDomain = wikiDomain;
             if (deps != null)
             {
-                Dependencies = deps.ToDictionary(
+                m_dependencies = deps.ToDictionary(
                     k => k.WikiPage,
                     v => v);
             }
             else
             {
-                Dependencies = new();
+                m_dependencies = new();
             }
 
             ArticlePath = articlePath ?? string.Empty;
@@ -67,28 +82,49 @@ namespace LuaDependencyFinder.Config
 
         public void OnSerializing()
         {
-            Deps = Dependencies.Values.ToArray();
+            Deps = m_dependencies.Values.ToArray();
         }
 
-        public static WikiConfig Create(string wikiDomain)
+        public static IWikiConfig Create(string wikiDomain)
         {
             return new WikiConfig(wikiDomain, "", "", null);
         }
 
-        public static WikiConfig? Load()
+        public static IWikiConfig? Load()
         {
             using FileStream fileStream = new(FileName, FileMode.Open, FileAccess.Read);
             return JsonSerializer.Deserialize<WikiConfig>(fileStream, JsonSerializerOptions);
         }
 
-        public void Save()
+        public void Persist()
         {
             try
             {
                 using FileStream filestream = new(FileName, FileMode.Create, FileAccess.Write);
                 JsonSerializer.Serialize<WikiConfig>(filestream, this, JsonSerializerOptions);
             }
-            catch { }
+            catch
+            {
+#if DEBUG
+                throw;
+#endif
+            }
+        }
+
+        public void AddOrUpdate(WikiDependency dependency)
+        {
+            lock (m_dependencies)
+            {
+                m_dependencies[dependency.WikiPage] = dependency;
+            }
+        }
+
+        public bool TryFind(string dependencyName, [NotNullWhen(true)] out WikiDependency? dependency)
+        {
+            lock (m_dependencies)
+            {
+                return m_dependencies.TryGetValue(dependencyName, out dependency);
+            }
         }
     }
 }

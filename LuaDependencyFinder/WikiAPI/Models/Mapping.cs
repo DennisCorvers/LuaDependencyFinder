@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace LuaDependencyFinder.WikiAPI
+namespace LuaDependencyFinder.WikiAPI.Models
 {
     internal static class Mapping
     {

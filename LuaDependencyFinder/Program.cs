@@ -1,7 +1,5 @@
 ﻿using LuaDependencyFinder.Config;
 using LuaDependencyFinder.Logging;
-using LuaDependencyFinder.WikiAPI;
-using System;
 
 namespace LuaDependencyFinder
 {
@@ -19,9 +17,9 @@ namespace LuaDependencyFinder
 
         static async Task Run()
         {
-            var logger = new ConsoleLogger();
+            ILogger logger = new ConsoleLogger();
             var configLoader = new ConfigLoader(logger);
-            WikiConfig? config;
+            IWikiConfig? config;
 
             try
             {
@@ -32,7 +30,7 @@ namespace LuaDependencyFinder
             }
             catch (FileNotFoundException)
             {
-                configLoader.CreateConfig();
+                configLoader.CreateNewConfig("");
 
                 Console.WriteLine("New configuration was created.");
                 Console.WriteLine("Fill out the configuration file and restart the application. Visit the \"Special:Version\" and look for the \"Entry point URLs\" section for additional information on how to fill out the config file.");
@@ -42,6 +40,7 @@ namespace LuaDependencyFinder
 
             var finder = new DepFinder(config!, logger);
             await finder.DownloadDependencies();    
+            //await finder.PatchFiles();
         }
     }
 }

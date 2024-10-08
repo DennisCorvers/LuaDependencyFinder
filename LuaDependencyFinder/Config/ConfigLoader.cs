@@ -11,9 +11,35 @@ namespace LuaDependencyFinder.Config
             m_logger = logger;
         }
 
-        public bool TryLoadConfig(out WikiConfig? config)
+        public static bool HasConfigFile
+            => File.Exists(WikiConfig.FileName);
+
+        public IWikiConfig? CreateNewConfig(string wikiDomain)
+        {
+            IWikiConfig config = WikiConfig.Create(wikiDomain);
+
+            try
+            {
+                config.Persist();
+            }
+            catch (Exception e)
+            {
+                m_logger.Log("Unable to create new configuration.");
+                m_logger.Log(e.Message);
+                return null;
+            }
+
+            return config;
+        }
+
+        public bool TryLoadConfig(out IWikiConfig? config)
         {
             config = null;
+            if (!HasConfigFile)
+            {
+                return false;
+            }
+
             try
             {
                 config = WikiConfig.Load();
@@ -22,7 +48,8 @@ namespace LuaDependencyFinder.Config
                     m_logger.Log("Unable to load config.");
                     return false;
                 }
-                if (!IsValidUrl(config.WikiDomain))
+
+                if (!Utils.StringUtils.IsValidUrl(config.WikiDomain))
                 {
                     m_logger.Log($"Invalid url found in configuration: \"{config.WikiDomain}\"");
                     m_logger.Log("Edit the configuration so that the url is a valid mediawiki address.");
@@ -31,42 +58,10 @@ namespace LuaDependencyFinder.Config
 
                 return true;
             }
-            catch (FileNotFoundException)
-            {
-                throw;
-            }
             catch (Exception e)
             {
                 m_logger.Log("Unable to load configuration.");
                 m_logger.Log(e.Message);
-                return false;
-            }
-        }
-
-        public void CreateConfig()
-        {
-            var config = WikiConfig.Create("");
-
-            try
-            {
-                config.Save();
-            }
-            catch (Exception e)
-            {
-                m_logger.Log("Unable to save new configuration.");
-                m_logger.Log(e.Message);
-            }
-        }
-
-        public static bool IsValidUrl(string url)
-        {
-            try
-            {
-                Uri uri = new(url);
-                return uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps;
-            }
-            catch (UriFormatException)
-            {
                 return false;
             }
         }
