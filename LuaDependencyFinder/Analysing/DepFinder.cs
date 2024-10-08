@@ -5,7 +5,7 @@ using LuaDependencyFinder.Storage;
 using LuaDependencyFinder.WikiAPI;
 using System.Collections.Immutable;
 
-namespace LuaDependencyFinder
+namespace LuaDependencyFinder.Analysing
 {
     internal class DepFinder
     {

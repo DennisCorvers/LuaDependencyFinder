@@ -16,7 +16,7 @@ namespace LuaDependencyFinder.Config
 
         private readonly Dictionary<string, WikiDependency> m_dependencies;
 
-        public const string FileName = "DepConfig.json";
+        public const string FileName = "WikiDependencyConfig.json";
 
         [JsonPropertyName("Dependencies")]
         [JsonPropertyOrder(3)]

@@ -35,34 +35,49 @@ namespace LuaDependencyFinder.Config
         public bool TryLoadConfig(out IWikiConfig? config)
         {
             config = null;
+
+            // Try and create a new configuration file if none is present.
             if (!HasConfigFile)
             {
+                m_logger.Log("No valid configuration file found. Creating a new configuration file...");
+
+                CreateNewConfig("");
+
+                m_logger.Log("New configuration was created.");
+                m_logger.Log("Fill out the configuration file and restart the application. Visit the \"Special:Version\" and look for the \"Entry point URLs\" section for additional information on how to fill out the config file.");
+
                 return false;
             }
 
             try
             {
                 config = WikiConfig.Load();
-                if (config == null)
-                {
-                    m_logger.Log("Unable to load config.");
-                    return false;
-                }
-
-                if (!Utils.StringUtils.IsValidUrl(config.WikiDomain))
-                {
-                    m_logger.Log($"Invalid url found in configuration: \"{config.WikiDomain}\"");
-                    m_logger.Log("Edit the configuration so that the url is a valid mediawiki address.");
-                    return false;
-                }
-
-                return true;
+                ValidateConfiguration(config);
             }
             catch (Exception e)
             {
-                m_logger.Log("Unable to load configuration.");
-                m_logger.Log(e.Message);
+                m_logger.Log($"Error trying to load config: {e.Message}");
                 return false;
+            }
+
+            return true;
+        }
+
+        private static void ValidateConfiguration(IWikiConfig? config)
+        {
+            if (config == null)
+            {
+                throw new ArgumentNullException("Configuration file could not be loaded. Try recreating the file.");
+            }
+
+            if (!Utils.StringUtils.IsValidUrl(config.WikiDomain))
+            {
+                throw new InvalidOperationException($"Invalid url found in configuration file for: \"{config.WikiDomain}\"");
+            }
+
+            if (string.IsNullOrWhiteSpace(config.ApiPath))
+            {
+                throw new InvalidDataException("Api path variable is empty.");
             }
         }
     }

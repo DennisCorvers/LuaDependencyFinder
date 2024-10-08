@@ -1,10 +1,8 @@
-﻿using LuaDependencyFinder.Config;
-using LuaDependencyFinder.Models;
-using System.Security.Cryptography.X509Certificates;
+﻿using LuaDependencyFinder.Models;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace LuaDependencyFinder
+namespace LuaDependencyFinder.Analysing
 {
     internal class LuaAnalyser : ILuaAnalyser
     {
@@ -37,7 +35,7 @@ namespace LuaDependencyFinder
                     if (beforeRequire.Contains("--"))
                         continue;
 
-                    var group = match.Groups[match.Groups.Count - 1];
+                    var group = GetMatchGroup(match);
                     var analyserResult = new AnalyserResult(group.Index, group.Length, lineNumber, group.Value);
                     result.Add(analyserResult);
                 }
@@ -75,6 +73,12 @@ namespace LuaDependencyFinder
             });
 
             return new WikiPage(wikiDependency.Page, wikiDependency.TimeStamp, result.ToString());
+        }
+
+        private static Group GetMatchGroup(Match match)
+        {
+            IList<Group> groups = match.Groups;
+            return groups.Skip(1).First(x => !string.IsNullOrEmpty(x.Value));
         }
     }
 }

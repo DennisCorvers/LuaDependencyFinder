@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace LuaDependencyFinder
+namespace LuaDependencyFinder.Analysing
 {
     internal interface ILuaAnalyser
     {
