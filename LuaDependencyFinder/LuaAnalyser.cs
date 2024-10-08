@@ -10,9 +10,12 @@ namespace LuaDependencyFinder
     {
         private readonly Regex m_requireRegex;
 
+        private const string requirePattern = @"\brequire\s*[\(\s]*['""]([^'""]+)['""]\s*[\)]?";
+        private const string loadJsonDataPattern = @"\bmw\.loadJsonData\s*[\(\s]*['""]([^'""]+)['""]\s*[\)]?";
+
         public LuaAnalyser()
         {
-            m_requireRegex = new Regex(@"\brequire\s*[\(\s]*['""]([^'""]+)['""]\s*[\)]?");
+            m_requireRegex = new Regex($@"\b(?:{requirePattern}|{loadJsonDataPattern})");
         }
 
         public IEnumerable<AnalyserResult> AnalyseLuaFile(string luaCode)
@@ -34,7 +37,7 @@ namespace LuaDependencyFinder
                     if (beforeRequire.Contains("--"))
                         continue;
 
-                    var group = match.Groups[1];
+                    var group = match.Groups[match.Groups.Count - 1];
                     var analyserResult = new AnalyserResult(group.Index, group.Length, lineNumber, group.Value);
                     result.Add(analyserResult);
                 }
