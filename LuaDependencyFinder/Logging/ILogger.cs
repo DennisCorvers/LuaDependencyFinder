@@ -8,6 +8,8 @@ namespace LuaDependencyFinder.Logging
 {
     public interface ILogger
     {
+        void BlankLike();
         void Log(string message);
+        void Log(string message, Exception? exception);
     }
 }

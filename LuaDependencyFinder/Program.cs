@@ -17,13 +17,20 @@ namespace LuaDependencyFinder
                 return;
             }
 
-            Console.WriteLine($"Loaded configuration for: {config!.WikiDomain}");
+            logger.Log($"Loaded configuration for: {config!.WikiDomain}");
 
-            var program = new Program(logger, config);
-            await program.Execute();
+            try
+            {
+                var program = new Program(logger, config);
+                await program.Execute();
+            }
+            catch (Exception e)
+            {
+                logger.Log("Unhandled exception.", e);
+            }
 
-            Console.WriteLine();
-            Console.WriteLine("Exiting application...");
+            logger.BlankLike();
+            logger.Log("Exiting application...");
 
             await Task.Delay(1000);
         }
@@ -90,7 +97,7 @@ namespace LuaDependencyFinder
             }
             catch (Exception e)
             {
-                m_logger.Log($"Unable to reload configuration file: {e}.");
+                m_logger.Log("Unable to reload configuration file.", e);
             }
         }
 

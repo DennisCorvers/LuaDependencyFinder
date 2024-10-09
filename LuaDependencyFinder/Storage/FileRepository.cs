@@ -77,7 +77,7 @@ namespace LuaDependencyFinder.Storage
             }
             catch (Exception e)
             {
-                m_logger.Log($"Unable to save page: {e.Message}.");
+                m_logger.Log($"Unable to save page.", e);
             }
 
             if (!success)
