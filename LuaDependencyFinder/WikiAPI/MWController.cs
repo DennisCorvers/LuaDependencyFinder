@@ -2,6 +2,7 @@
 using LuaDependencyFinder.Logging;
 using LuaDependencyFinder.Models;
 using LuaDependencyFinder.WikiAPI.Models;
+using System.Security.Cryptography.X509Certificates;
 
 namespace LuaDependencyFinder.WikiAPI
 {
@@ -24,11 +25,32 @@ namespace LuaDependencyFinder.WikiAPI
 
         public async Task<MediaWikiRevision?> GetRevisionHistory(IEnumerable<string> pages)
         {
-            if (pages.Count() > 50)
+            var distinctPages = pages
+                .Distinct()
+                .Chunk(50);
+
+            var revisionChunksTasks = distinctPages.Select(GetRevisionHistoryChunk);
+            var revisionChunks = await Task.WhenAll(revisionChunksTasks);
+
+            if (!revisionChunks.Any())
             {
-                // TODO: make multiple API Calls instead
-                throw new Exception("Too many pages at once");
+                return null;
             }
+
+            return revisionChunks
+                    .Where(chunk => chunk != null)
+                    .Aggregate((first, next) =>
+                    {
+                        foreach (var page in next!.Query.Pages)
+                        {
+                            first!.Query.Pages[page.Key] = page.Value;
+                        }
+                        return first;
+                    });
+        }
+
+        private async Task<MediaWikiRevision?> GetRevisionHistoryChunk(IEnumerable<string> pages)
+        {
             var pageQuery = string.Join("|", pages);
             var url = new UriBuilder(m_apiUri)
             {

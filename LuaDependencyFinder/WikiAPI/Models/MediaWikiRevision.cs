@@ -11,7 +11,7 @@ namespace LuaDependencyFinder.WikiAPI.Models
     public class MediaWikiRevision
     {
         [JsonPropertyName("query")]
-        public Query? Query { get; set; }
+        public Query Query { get; set; }
     }
 
     public class Query
