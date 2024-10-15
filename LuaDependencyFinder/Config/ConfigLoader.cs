@@ -66,7 +66,7 @@ namespace LuaDependencyFinder.Config
         {
             if (config == null)
             {
-                throw new ArgumentNullException("Configuration file could not be loaded. Try recreating the file.");
+                throw new ArgumentNullException(nameof(config), "Configuration file could not be loaded. Try recreating the file.");
             }
 
             if (!Utils.StringUtils.IsValidUrl(config.WikiDomain))

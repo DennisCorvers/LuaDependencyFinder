@@ -56,10 +56,5 @@ namespace LuaDependencyFinder.WikiAPI
                     );
             }
         }
-
-        public async Task<IWikiConfig> DiscoverEndpoints()
-        {
-            throw new NotImplementedException();
-        }
     }
 }

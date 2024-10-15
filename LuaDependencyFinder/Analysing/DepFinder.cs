@@ -15,12 +15,12 @@ namespace LuaDependencyFinder.Analysing
         private readonly IFileRepository m_fileRepository;
         private readonly ILuaAnalyser m_luaAnalyser;
 
-        public DepFinder(IWikiConfig config, ILogger logger)
+        public DepFinder(IWikiConfig config, ILogger logger, IFileRepository fileRepository)
         {
             m_config = config;
             m_mwService = new MWService(config, logger);
             m_logger = logger;
-            m_fileRepository = new FileRepository(config, logger);
+            m_fileRepository = fileRepository;
             m_luaAnalyser = new LuaAnalyser();
         }
 
@@ -51,27 +51,23 @@ namespace LuaDependencyFinder.Analysing
             }
         }
 
-        public async Task DownloadDependencies()
+        public Task DownloadDependencies()
+            => DownloadDependencies(Enumerable.Empty<WikiDependency>());
+
+        public async Task DownloadDependencies(IEnumerable<WikiDependency> dependencies)
         {
-            var localFiles = m_fileRepository.GetLocalDependencies();
+            var localDependencies = m_fileRepository.GetLocalDependencies();
+            var collectedPages = new HashSet<string>(
+                localDependencies
+                    .Concat(dependencies)
+                    .Select(x => x.WikiPage));
 
-            var collectedPages = new HashSet<string>(localFiles.Select(x => x.WikiPage));
+            // Load local dependencies if there are no dependencies explicitely given.
+            dependencies = dependencies.Any() ? dependencies : localDependencies;
+            var tasks = dependencies.Select(m_fileRepository.LoadDepencency);
+            var wikiPages = await Task.WhenAll(tasks);
 
-            // Read all local dependencies
-            var tasks = localFiles.Select(async file =>
-            {
-                using (var sr = new StreamReader(file.Path, System.Text.Encoding.UTF8))
-                {
-                    var contents = await sr.ReadToEndAsync();
-                    sr.Close();
-
-                    return new WikiPage(file.WikiPage, default, contents);
-                }
-            });
-
-            var localWikiPages = await Task.WhenAll(tasks);
-
-            await DownloadAndStoreDependencies(localWikiPages, collectedPages);
+            await DownloadAndStoreDependencies(wikiPages, collectedPages);
         }
 
         private async Task DownloadAndStoreDependencies(IEnumerable<WikiPage> dependencies, ISet<string> pages)

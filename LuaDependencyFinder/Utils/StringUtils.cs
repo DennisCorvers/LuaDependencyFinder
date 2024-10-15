@@ -40,5 +40,20 @@
                 return false;
             }
         }
+
+        public static string GetFileRoot(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                throw new ArgumentNullException(nameof(path));
+            }
+
+            if (!File.Exists(path))
+            {
+                throw new FileNotFoundException(path);
+            }
+
+            return Path.GetDirectoryName(path)!;
+        }
     }
 }
