@@ -19,13 +19,18 @@ namespace LuaDependencyFinder.WikiAPI
 
         public async Task<IEnumerable<WikiPage>> GetDependencies(IEnumerable<string> pages)
         {
-            var workerTasks = pages.Select(async page =>
-            {
-                return await m_controller.DownloadDependency(page);
-            });
+            var results = new List<WikiPage>();
 
-            var results = await Task.WhenAll(workerTasks);
-            return results.Where(x => x != null)!;
+            foreach (var page in pages)
+            {
+                var result = await m_controller.DownloadDependency(page);
+                if (result != null)
+                {
+                    results.Add(result);
+                }
+            }
+
+            return results;
         }
 
         public async Task<IEnumerable<PageRevision>> GetRevisionHistory(IEnumerable<string> pages)

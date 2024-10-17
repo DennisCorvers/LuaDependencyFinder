@@ -2,12 +2,14 @@
 using LuaDependencyFinder.Logging;
 using LuaDependencyFinder.Models;
 using LuaDependencyFinder.WikiAPI.Models;
-using System.Security.Cryptography.X509Certificates;
+using System.Net;
 
 namespace LuaDependencyFinder.WikiAPI
 {
     public class MWController
     {
+        private const int MaxRetries = 5;
+
         private readonly HttpClient m_httpClient;
         private readonly IWikiConfig m_config;
         private readonly Uri m_apiUri;
@@ -78,16 +80,53 @@ namespace LuaDependencyFinder.WikiAPI
             }.Uri;
             m_logger.Log($"Downloading contents from {pageUrl}");
 
-            var response = await m_httpClient.GetAsync(pageUrl);
-            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            var response = await TryDownloadPage(pageUrl);
+            if (response != null)
             {
-                m_logger.Log($"Page \"{pageUrl}\" does not exist.");
-                return null;
+                var contents = await response.Content.ReadAsStringAsync();
+                return new WikiPage(page, DateTime.UtcNow, contents);
             }
 
-            var contents = await response.Content.ReadAsStringAsync();
+            return null;
+        }
 
-            return new WikiPage(page, DateTime.UtcNow, contents);
+        /// <summary>
+        /// Attempts to download the contents of a page.
+        /// Makes several retries with an increasing time interval if the server indicates that there are too many requests.
+        /// </summary>
+        /// <param name="pageUrl">The uri of the page to download.</param>
+        private async Task<HttpResponseMessage?> TryDownloadPage(Uri pageUrl)
+        {
+            var currentTries = 0;
+
+            while (currentTries < MaxRetries)
+            {
+                var response = await m_httpClient.GetAsync(pageUrl);
+                switch (response.StatusCode)
+                {
+                    case HttpStatusCode.NotFound:
+                        {
+                            m_logger.Log($"Page \"{pageUrl}\" does not exist.");
+                            return null;
+                        }
+                    case HttpStatusCode.TooManyRequests:
+                        {
+                            currentTries++;
+                            await Task.Delay(currentTries * 250);
+                            continue;
+                        }
+                    case HttpStatusCode.OK:
+                        {
+                            return response;
+                        }
+                    default:
+                        m_logger.Log($"Unable to retrieve page contents. {response.StatusCode}");
+                        return null;
+                }
+            }
+
+            m_logger.Log($"Maximum retries exceeded. Unable to download page \"{pageUrl}\"");
+            return null;
         }
     }
 }
