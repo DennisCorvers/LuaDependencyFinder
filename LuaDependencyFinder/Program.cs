@@ -11,10 +11,12 @@ namespace LuaDependencyFinder
         static async Task Main(string[] args)
         {
             ServiceProvider? serviceProvider;
+            ILogger logger;
 
             try
             {
                 serviceProvider = ConfigureServices(args);
+                logger = serviceProvider.GetRequiredService<ILogger>();
             }
             catch (Exception ex)
             {
@@ -33,7 +35,7 @@ namespace LuaDependencyFinder
             }
             catch (Exception e)
             {
-                Console.WriteLine($"An error has occured: {e.Message}");
+                logger.LogException($"An error has occured.", e);
             }
 
             Console.WriteLine();

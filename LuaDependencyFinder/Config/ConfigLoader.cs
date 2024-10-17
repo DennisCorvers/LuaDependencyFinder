@@ -24,7 +24,7 @@ namespace LuaDependencyFinder.Config
             }
             catch (Exception e)
             {
-                m_logger.Log("Unable to create new configuration.", e);
+                m_logger.LogException("Unable to create new configuration.", e);
                 return null;
             }
 
@@ -55,7 +55,7 @@ namespace LuaDependencyFinder.Config
             }
             catch (Exception e)
             {
-                m_logger.Log($"Error trying to load configuration.", e);
+                m_logger.LogException($"Error trying to load configuration.", e);
                 return false;
             }
 
