@@ -71,12 +71,17 @@ namespace LuaDependencyFinder.Config
 
             if (!Utils.StringUtils.IsValidUrl(config.WikiDomain))
             {
-                throw new InvalidOperationException($"Invalid url found in configuration file for: \"{config.WikiDomain}\"");
+                throw new InvalidOperationException($"Invalid url found in configuration file for WikiDomain: \"{config.WikiDomain}\"");
             }
 
             if (string.IsNullOrWhiteSpace(config.ApiPath))
             {
                 throw new InvalidDataException("Api path variable is empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(config.ArticlePath))
+            {
+                throw new InvalidDataException("Article Path variable is empty.");
             }
         }
     }

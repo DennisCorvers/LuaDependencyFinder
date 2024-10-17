@@ -2,20 +2,19 @@
 using LuaDependencyFinder.Config;
 using LuaDependencyFinder.Logging;
 using LuaDependencyFinder.Storage;
-using System.Diagnostics;
-using System.Security.Cryptography.X509Certificates;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LuaDependencyFinder
 {
     internal class Program
     {
-        private static readonly ApplicationContext m_context = new ApplicationContext();
-
         static async Task Main(string[] args)
         {
+            ServiceProvider? serviceProvider;
+
             try
             {
-                SetupServices(args);
+                serviceProvider = ConfigureServices(args);
             }
             catch (Exception ex)
             {
@@ -26,7 +25,10 @@ namespace LuaDependencyFinder
 
             try
             {
-                IApplicationMode applicationMode = m_context.GetService<IApplicationMode>();
+                // Try to fetch the config to verify that it is correct.
+                _ = serviceProvider.GetRequiredService<IWikiConfig>();
+
+                var applicationMode = serviceProvider.GetRequiredService<IApplicationMode>();
                 await applicationMode.Execute();
             }
             catch (Exception e)
@@ -40,33 +42,46 @@ namespace LuaDependencyFinder
             await Task.Delay(1000);
         }
 
-        // Some cheap dependency setup.
-        private static void SetupServices(string[] args)
+        private static ServiceProvider ConfigureServices(string[] args)
         {
-            ILogger logger = new ConsoleLogger();
-            var configLoader = new ConfigLoader(logger);
+            var services = new ServiceCollection()
+                .AddSingleton<ILogger, ConsoleLogger>()
+                .AddSingleton<ConfigLoader>()
+                .AddTransient<DepFinder>()
+                .AddTransient<IWikiConfig>(serviceProvider =>
+                {
+                    var configLoader = serviceProvider.GetRequiredService<ConfigLoader>();
+                    if (!configLoader.TryLoadConfig(out IWikiConfig? config) || config == null)
+                    {
+                        throw new Exception("Unable to load configuration.");
+                    }
 
-            if (!configLoader.TryLoadConfig(out IWikiConfig? config) || config == null)
-            {
-                throw new Exception("Unable to load configuration.");
-            }
+                    return config;
+                });
 
-            m_context.AddService<ILogger>(logger);
-            m_context.AddService<IWikiConfig>(config);
 
             if (args.Length > 0)
             {
+                // If a file argument is passed, use the headless application mode.
                 var file = args[0];
                 var root = Utils.StringUtils.GetFileRoot(file);
 
-                m_context.AddService<IFileRepository>(new FileRepository(config, logger, root));
-                m_context.AddService<IApplicationMode>(new CmdRunner(m_context, file));
+                services.AddSingleton<IFileRepository>(serviceProvider =>
+                    new FileRepository(
+                        serviceProvider.GetRequiredService<IWikiConfig>(),
+                        serviceProvider.GetRequiredService<ILogger>(),
+                        root));
+
+                services.AddSingleton<IApplicationMode>(serviceProvider =>
+                    new CmdRunner(serviceProvider, file));
             }
             else
             {
-                m_context.AddService<IFileRepository>(new FileRepository(config, logger));
-                m_context.AddService<IApplicationMode>(new CommandRunner(m_context));
+                services.AddSingleton<IFileRepository, FileRepository>();
+                services.AddSingleton<IApplicationMode, CommandRunner>();
             }
+
+            return services.BuildServiceProvider();
         }
     }
 }

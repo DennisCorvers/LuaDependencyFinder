@@ -2,63 +2,42 @@
 using LuaDependencyFinder.Config;
 using LuaDependencyFinder.Logging;
 using LuaDependencyFinder.Storage;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LuaDependencyFinder
 {
     internal class CommandRunner : IApplicationMode
     {
         private readonly CommandManager m_commandManager;
-        private IWikiConfig m_config;
-        private readonly ILogger m_logger;
-        private readonly IFileRepository m_fileRepository;
+        private readonly IServiceProvider m_serviceProvider;
         private bool m_isRunning;
 
-        public CommandRunner(ApplicationContext context)
+        public CommandRunner(IServiceProvider serviceProvider)
         {
             m_commandManager = new CommandManager();
             SetupCommands();
             m_isRunning = true;
 
-            m_config  = context.GetService<IWikiConfig>();
-            m_logger = context.GetService<ILogger>();
-            m_fileRepository = context.GetService<IFileRepository>();
+            m_serviceProvider = serviceProvider;
         }
 
         private void SetupCommands()
         {
             m_commandManager.AddCommand(new Command("Quit", Quit, "Exit the application."));
-            m_commandManager.AddCommand(new Command("Reload", ReloadConfig, "Reload the configuration."));
             m_commandManager.AddCommand(new Command("Patch", PatchLocalFiles, "Patch all local files and bring them up to date."));
             m_commandManager.AddCommand(new Command("Download", DownloadDependencies, "Download all missing dependencies required by local files."));
         }
 
-        private void ReloadConfig()
-        {
-            try
-            {
-                var newConfig = WikiConfig.Load();
-                if (newConfig != null)
-                {
-                    m_config = newConfig;
-                    m_logger.Log("Reloaded configuration file.");
-                }
-            }
-            catch (Exception e)
-            {
-                m_logger.Log("Unable to reload configuration file.", e);
-            }
-        }
-
         private async Task PatchLocalFiles()
         {
-            var finder = new DepFinder(m_config, m_logger, m_fileRepository);
-            await finder.PatchFiles();
+            var depFinder = m_serviceProvider.GetRequiredService<DepFinder>();
+            await depFinder.PatchFiles();
         }
 
         private async Task DownloadDependencies()
         {
-            var finder = new DepFinder(m_config, m_logger, m_fileRepository);
-            await finder.DownloadDependencies();
+            var depFinder = m_serviceProvider.GetRequiredService<DepFinder>();
+            await depFinder.DownloadDependencies();
         }
 
         private void Quit()

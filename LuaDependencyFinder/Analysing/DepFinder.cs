@@ -32,6 +32,13 @@ namespace LuaDependencyFinder.Analysing
             m_logger.Log("Patching local files...");
             var pages = m_fileRepository.GetLocalDependencies().Select(x => x.WikiPage);
             // Check the wiki for revision history on all local files.
+
+            if (!pages.Any())
+            {
+                m_logger.Log("No pages found to patch.");
+                return;
+            }
+
             var revisionHistory = await m_mwService.GetRevisionHistory(pages);
 
             // Find outdated pages
