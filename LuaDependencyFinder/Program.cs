@@ -36,6 +36,7 @@ namespace LuaDependencyFinder
             catch (Exception e)
             {
                 logger.LogException($"An error has occured.", e);
+                Console.ReadLine();
             }
 
             Console.WriteLine();
